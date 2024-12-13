@@ -26,14 +26,29 @@ namespace CrystalAutomation
 
             Console.WriteLine("Asignando carpetas INPUT y OUTPUT");
 
-            string inputFolder = @"C:\Users\Soporte2\Desktop\FOLDER_INPUT"; // Cambia esta ruta
-            string outputFolder = @"C:\Users\Soporte2\Desktop\FOLDER_OUTPUT"; // Cambia esta ruta
+            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+
+            string inputFolder = Path.Combine(desktopPath, "FOLDER_INPUT");
+            string outputFolder = Path.Combine(desktopPath, "FOLDER_OUTPUT");
+            string erpFolder = Path.Combine(desktopPath, "FOLDER_ERP");
 
             // Crear la carpeta de salida si no existe
             if (!Directory.Exists(outputFolder))
             {
                 Console.WriteLine("Creando carpeta OUTPUT");
                 Directory.CreateDirectory(outputFolder);
+            }
+
+            if (!Directory.Exists(inputFolder))
+            {
+                Console.WriteLine("Creando carpeta OUTPUT");
+                Directory.CreateDirectory(inputFolder);
+            }
+
+            if (!Directory.Exists(erpFolder))
+            {
+                Console.WriteLine("Creando carpeta ERP OLD");
+                Directory.CreateDirectory(erpFolder);
             }
 
             Console.WriteLine("Configurando el observador de la carpeta INPUT FOLDER");
@@ -46,7 +61,8 @@ namespace CrystalAutomation
             };
 
             watcher.Created += (sender, e) => ProcessFile(e.FullPath, outputFolder);
-            
+            //watcher.Changed += (sender, e) => ProcessFile(e.FullPath, outputFolder);
+
             watcher.EnableRaisingEvents = true;
 
         }
@@ -61,32 +77,59 @@ namespace CrystalAutomation
         private void ProcessFile(string inputPath, string outputFolder)
         {
 
-            Console.WriteLine("Crystal Report iniciado ...");
-            EventLog.WriteEntry("CrystalReportService iniciado.");
-
-            string pdfOutputPath = Path.Combine(outputFolder, Path.GetFileNameWithoutExtension(inputPath) + ".pdf");
-            
             try
             {
+                //ReportDocument reportDocument = new ReportDocument();
 
-                Console.WriteLine("Cargando archivo .rpt...");
-                ReportDocument reportDocument = new ReportDocument();
-                reportDocument.Load(inputPath);
+                using (ReportDocument reportDocument = new ReportDocument())
+                {
 
-                Console.WriteLine("Exportando el archivo a PDF...");
-                reportDocument.ExportToDisk(ExportFormatType.PortableDocFormat, pdfOutputPath);
+                    Console.WriteLine("Renombrando archivo en Input...");
+                    string renamedInputPath = RenameFileInInput(inputPath);
 
-                Console.WriteLine("Modificando el archivo PDF...");
-                ModifyPdf(pdfOutputPath, pdfOutputPath, "89231700-3");
+                    Console.WriteLine("Crystal Report iniciado ...");
+                    EventLog.WriteEntry("CrystalReportService iniciado.");
+
+                    Console.WriteLine($"Archivo encontrado: {File.Exists(renamedInputPath)}");
+                    Console.WriteLine($"Ruta del archivo: {renamedInputPath}");
+                    Console.WriteLine($"Cargando el archivo .rpt...");
+
+                    reportDocument.Load(renamedInputPath);
+
+                    Console.WriteLine("Generando ruta única para Output...");
+                    string renamePdfOutputPath = GenerateUniqueOutputPath(renamedInputPath, outputFolder);
+
+                    Console.WriteLine("Exportando el archivo a PDF...");
+                    reportDocument.ExportToDisk(ExportFormatType.PortableDocFormat, renamePdfOutputPath);
+
+                    Console.WriteLine("Modificando el archivo PDF...");
+                    ModifyPdf(renamePdfOutputPath, renamePdfOutputPath, "89231700-3");
+
+                    // Mover renamedInputPath a otra carpeta erpFolder
+
+                    Console.WriteLine("Moviendo el archivo procesado a la carpeta ERP...");
+                    string erpFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "FOLDER_ERP");
+
+                    // Crear la carpeta si no existe
+                    if (!Directory.Exists(erpFolder))
+                    {
+                        Directory.CreateDirectory(erpFolder);
+                    }
+
+                    string destinationPath = Path.Combine(erpFolder, Path.GetFileName(renamedInputPath));
+
+                    File.Move(renamedInputPath, destinationPath);
+                    Console.WriteLine($"Archivo movido a: {destinationPath}");
+
+
+                }
+
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error al procesar archivo: {ex.Message}");
             }
         }
-
-        // Crear una fuente estándar (Helvetica, Times-Roman, etc.)
-        //PdfFont font = PdfFontFactory.CreateFont(iText.IO.Font.Constants.StandardFonts.HELVETICA);
 
         private void ModifyPdf(string inputPdfPath, string outputPdfPath, string overlayText)
         {
@@ -133,6 +176,35 @@ namespace CrystalAutomation
             {
                 Console.WriteLine($"Error al modificar el PDF: {ex.Message}");
             }
+        }
+
+        private string RenameFileInInput(string filePath)
+        {
+            string directory = Path.GetDirectoryName(filePath);
+            string extension = Path.GetExtension(filePath);
+            string fileName = Path.GetFileNameWithoutExtension(filePath);
+
+            // Generar un nuevo nombre único
+            string uniqueName = $"{fileName}_{DateTime.Now:yyyyMMdd_HHmmss}{extension}";
+
+            string newFilePath = Path.Combine(directory, uniqueName);
+
+            // Renombrar el archivo
+            File.Move(filePath, newFilePath);
+            
+
+            Console.WriteLine($"Archivo renombrado en Input: {newFilePath}");
+            return newFilePath;
+        }
+
+        private string GenerateUniqueOutputPath(string originalPath, string outputFolder)
+        {
+            string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(originalPath);
+            string uniqueName = $"{fileNameWithoutExtension}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+
+            string outputPath = Path.Combine(outputFolder, uniqueName);
+            Console.WriteLine($"Archivo PDF generado con nombre único: {outputPath}");
+            return outputPath;
         }
 
         public void TestRun()
