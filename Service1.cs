@@ -10,6 +10,9 @@ using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
 using PdfSharp.Drawing;
 
+using iTextPdf = iText.Kernel.Pdf;
+using iText.Kernel.Pdf.Canvas.Parser;
+
 namespace CrystalAutomation
 {
     public partial class Service1 : ServiceBase
@@ -102,11 +105,23 @@ namespace CrystalAutomation
                     Console.WriteLine("Exportando el archivo a PDF...");
                     reportDocument.ExportToDisk(ExportFormatType.PortableDocFormat, renamePdfOutputPath);
 
-                    Console.WriteLine("Modificando el archivo PDF...");
-                    ModifyPdf(renamePdfOutputPath, renamePdfOutputPath, "89231700-3");
+                    // Validar que el archivo contega el rut 88888888-8
+                    Console.WriteLine("Validando contenido del archivo PDF...");
+                    bool response = ContainsValueInPdf(renamePdfOutputPath, "88888888-8");
+
+                    if(response == false)
+                    {
+
+                       Console.WriteLine("El archivo no contiene el valor esperado. No se realizarán más acciones.");
+                        return;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Modificando el archivo PDF...");
+                        ModifyPdf(renamePdfOutputPath, renamePdfOutputPath, "89231700-3");
+                    }
 
                     // Mover renamedInputPath a otra carpeta erpFolder
-
                     Console.WriteLine("Moviendo el archivo procesado a la carpeta ERP...");
                     string erpFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "FOLDER_ERP");
 
@@ -176,6 +191,33 @@ namespace CrystalAutomation
             {
                 Console.WriteLine($"Error al modificar el PDF: {ex.Message}");
             }
+        }
+
+        private bool ContainsValueInPdf(string pdfPath, string value)
+        {
+            try
+            {
+                using (iTextPdf.PdfReader reader = new iTextPdf.PdfReader(pdfPath))
+                using (iTextPdf.PdfDocument pdfDoc = new iTextPdf.PdfDocument(reader))
+                {
+                    for (int i = 1; i <= pdfDoc.GetNumberOfPages(); i++)
+                    {
+                        string pageContent = iText.Kernel.Pdf.Canvas.Parser.PdfTextExtractor.GetTextFromPage(pdfDoc.GetPage(i));
+                        if (pageContent.Contains(value))
+                        {
+                            Console.WriteLine($"El valor {value} fue encontrado en la página {i}");
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al leer el PDF: {ex.Message}");
+            }
+
+            Console.WriteLine($"El valor {value} no fue encontrado en el PDF.");
+            return false;
         }
 
         private string RenameFileInInput(string filePath)
